@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PeerChat - P2P Messenger</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import none;
+        
+        * {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .message-appear {
+            animation: slideIn 0.2s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .pulse-dot {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .chat-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .chat-scroll::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        
+        .chat-scroll::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        
+        .chat-scroll::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        
+        .dark .chat-scroll::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        
+        .dark .chat-scroll::-webkit-scrollbar-thumb {
+            background: #475569;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
+    <!-- HTTPS Warning Banner -->
+    <div id="httpsWarning" class="hidden bg-rose-600 text-white px-4 py-3 shadow-lg">
+        <div class="container mx-auto max-w-6xl flex items-start gap-3">
+            <svg class="w-6 h-6 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+            </svg>
+            <div class="flex-1 text-sm">
+                <strong class="font-semibold">WebRTC funktioniert nicht über file:// oder content://</strong>
+                <p class="mt-1">Bitte über HTTPS hosten: GitHub Pages, Netlify, Vercel oder lokal mit <code class="bg-rose-700 px-1.5 py-0.5 rounded">npx serve</code></p>
+            </div>
+        </div>
+    </div>
+
+    <div class="container mx-auto px-4 py-4 md:py-8 max-w-6xl">
+        <!-- Header -->
+        <div class="bg-white rounded-2xl shadow-lg p-6 mb-4 border border-slate-200">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                    <h1 class="text-2xl md:text-3xl font-bold text-slate-800 flex items-center gap-2">
+                        <svg class="w-8 h-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                        </svg>
+                        PeerChat
+                    </h1>
+                    <p class="text-slate-500 text-sm mt-1">Sichere P2P-Kommunikation mit WebRTC</p>
+                </div>
+                
+                <div class="flex items-center gap-3">
+                    <div id="statusBadge" class="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-700 rounded-full border border-amber-200">
+                        <span class="pulse-dot w-2 h-2 bg-amber-500 rounded-full"></span>
+                        <span class="text-sm font-medium" id="statusText">Initialisiere...</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Peer ID Display -->
+            <div class="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                <label class="text-xs font-semibold text-slate-600 uppercase tracking-wide">Deine Peer-ID</label>
+                <div class="flex flex-col sm:flex-row gap-2 mt-2">
+                    <div class="flex-1 flex items-center gap-2 bg-white px-4 py-2.5 rounded-lg border border-slate-300">
+                        <svg class="w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2"></path>
+                        </svg>
+                        <input type="text" id="myPeerId" readonly 
+                               class="flex-1 bg-transparent text-slate-700 text-sm font-mono outline-none min-w-0"
+                               value="Generiere...">
+                    </div>
+                    <button id="copyIdBtn" 
+                            class="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium text-sm transition-all duration-200 shadow-md hover:shadow-lg flex items-center justify-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                        </svg>
+                        <span>Kopieren</span>
+                    </button>
+                </div>
+                <div id="copyFallback" class="hidden mt-2 p-2 bg-amber-50 border border-amber-200 rounded-lg">
+                    <p class="text-xs text-amber-800 mb-1">Clipboard nicht verfügbar. Manuell kopieren:</p>
+                    <input type="text" id="copyFallbackInput" readonly class="w-full px-2 py-1 text-xs font-mono bg-white border border-amber-300 rounded">
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <!-- Connection Panel -->
+            <div class="lg:col-span-1">
+                <div class="bg-white rounded-2xl shadow-lg p-6 border border-slate-200 h-full">
+                    <h2 class="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
+                        <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656l-1.1 1.1"></path>
+                        </svg>
+                        Verbindung
+                    </h2>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label class="text-sm font-medium text-slate-700 mb-2 block">Peer-ID des Empfängers</label>
+                            <input type="text" id="remotePeerId" 
+                                   placeholder="Peer-ID eingeben..."
+                                   class="w-full px-4 py-2.5 bg-slate-50 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all">
+                        </div>
+                        
+                        <button id="connectBtn" 
+                                disabled
+                                class="w-full px-4 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-lg font-medium text-sm transition-all duration-200 shadow-md hover:shadow-lg flex items-center justify-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                            </svg>
+                            <span>Verbinden</span>
+                        </button>
+                        
+                        <button id="disconnectBtn" 
+                                class="w-full px-4 py-3 bg-rose-600 hover:bg-rose-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-lg font-medium text-sm transition-all duration-200 shadow-md hover:shadow-lg hidden items-center justify-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                            <span>Trennen</span>
+                        </button>
+                    </div>
+
+                    <!-- Connection Info -->
+                    <div id="connectionInfo" class="mt-6 p-4 bg-slate-50 rounded-xl border border-slate-200 hidden">
+                        <div class="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">Verbunden mit</div>
+                        <div class="text-sm font-mono text-slate-700 break-all" id="connectedPeerId">-</div>
+                        <div class="mt-3 flex items-center gap-2 text-xs text-emerald-700">
+                            <span class="w-2 h-2 bg-emerald-500 rounded-full"></span>
+                            <span>Ende-zu-Ende verschlüsselt</span>
+                        </div>
+                    </div>
+
+                    <!-- Error Log -->
+                    <div id="errorLog" class="mt-4 hidden">
+                        <div class="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">Fehler-Log</div>
+                        <div id="errorList" class="space-y-1 max-h-40 overflow-y-auto text-xs"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Panel -->
+            <div class="lg:col-span-2">
+                <div class="bg-white rounded-2xl shadow-lg border border-slate-200 flex flex-col h-[calc(100vh-280px)] min-h-[500px]">
+                    <!-- Chat Header -->
+                    <div class="px-6 py-4 border-b border-slate-200">
+                        <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"></path>
+                            </svg>
+                            Chat
+                        </h2>
+                    </div>
+
+                    <!-- Messages -->
+                    <div id="chatWindow" class="flex-1 overflow-y-auto p-4 space-y-3 chat-scroll">
+                        <div class="flex flex-col items-center justify-center h-full text-center text-slate-400">
+                            <svg class="w-16 h-16 mb-3 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+                            </svg>
+                            <p class="text-sm">Verbinde dich mit einem Peer um zu chatten</p>
+                        </div>
+                    </div>
+
+                    <!-- Input Area -->
+                    <div class="p-4 border-t border-slate-200 bg-slate-50">
+                        <div class="flex gap-2">
+                            <input type="file" id="fileInput" class="hidden">
+                            <button id="fileBtn" 
+                                    class="px-3 py-2.5 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    disabled
+                                    title="Datei senden">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path>
+                                </svg>
+                            </button>
+                            <input type="text" id="messageInput" 
+                                   placeholder="Nachricht eingeben..."
+                                   disabled
+                                   class="flex-1 px-4 py-2.5 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all disabled:bg-slate-100 disabled:cursor-not-allowed">
+                            <button id="sendBtn" 
+                                    disabled
+                                    class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-lg font-medium text-sm transition-all duration-200 shadow-md hover:shadow-lg flex items-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                                </svg>
+                                <span class="hidden sm:inline">Senden</span>
+                            </button>
+                        </div>
+                        <div id="fileProgress" class="mt-3 hidden">
+                            <div class="flex items-center justify-between text-xs text-slate-600 mb-1">
+                                <span id="fileProgressText">Übertrage Datei...</span>
+                                <span id="fileProgressPercent">0%</span>
+                            </div>
+                            <div class="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                                <div id="fileProgressBar" class="bg-indigo-600 h-full transition-all duration-300" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Protokoll-Check beim Start
+        const httpsWarning = document.getElementById('httpsWarning');
+        if (location.protocol !== 'https:' && location.protocol !== 'http:' && location.hostname !== 'localhost') {
+            httpsWarning.classList.remove('hidden');
+            addSystemMessage('⚠️ Warnung: WebRTC funktioniert nicht über ' + location.protocol + ' - Hosting auf HTTPS erforderlich');
+        }
+
+        // Globale Variablen
+        let peer = null;
+        let conn = null;
+        let localPeerId = null;
+        let isPeerReady = false;
+        const CHUNK_SIZE = 16384; // 16KB chunks für WebRTC DataChannel
+        
+        // File Transfer States
+        let fileChunks = {};
+        let incomingFile = null;
+        
+        // DOM Elemente
+        const myPeerIdInput = document.getElementById('myPeerId');
+        const remotePeerIdInput = document.getElementById('remotePeerId');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const sendBtn = document.getElementById('sendBtn');
+        const messageInput = document.getElementById('messageInput');
+        const chatWindow = document.getElementById('chatWindow');
+        const copyIdBtn = document.getElementById('copyIdBtn');
+        const copyFallback = document.getElementById('copyFallback');
+        const copyFallbackInput = document.getElementById('copyFallbackInput');
+        const fileBtn = document.getElementById('fileBtn');
+        const fileInput = document.getElementById('fileInput');
+        const statusBadge = document.getElementById('statusBadge');
+        const statusText = document.getElementById('statusText');
+        const connectionInfo = document.getElementById('connectionInfo');
+        const connectedPeerId = document.getElementById('connectedPeerId');
+        const fileProgress = document.getElementById('fileProgress');
+        const fileProgressBar = document.getElementById('fileProgressBar');
+        const fileProgressText = document.getElementById('fileProgressText');
+        const fileProgressPercent = document.getElementById('fileProgressPercent');
+        const errorLog = document.getElementById('errorLog');
+        const errorList = document.getElementById('errorList');
+
+        // Error Logging
+        function logError(type, message) {
+            console.error(`[${type}]`, message);
+            errorLog.classList.remove('hidden');
+            const errorItem = document.createElement('div');
+            errorItem.className = 'p-2 bg-rose-50 border border-rose-200 rounded text-rose-800';
+            errorItem.innerHTML = `<strong>${type}:</strong> ${escapeHtml(message)}`;
+            errorList.appendChild(errorItem);
+            errorList.scrollTop = errorList.scrollHeight;
+            addSystemMessage(`Fehler [${type}]: ${message}`);
+        }
+
+        // PeerJS initialisieren
+        function initPeer() {
+            updateStatus('amber', 'Initialisiere...');
+            connectBtn.disabled = true;
+            
+            peer = new Peer({
+                host: '0.peerjs.com',
+                secure: true,
+                port: 443,
+                debug: 3,
+                config: {
+                    'iceServers': [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' },
+                        {
+                            urls: 'turn:openrelay.metered.ca:80',
+                            username: 'openrelayproject',
+                            credential: 'openrelayproject'
+                        },
+                        {
+                            urls: 'turn:openrelay.metered.ca:443',
+                            username: 'openrelayproject',
+                            credential: 'openrelayproject'
+                        }
+                    ]
+                }
+            });
+
+            peer.on('open', (id) => {
+                localPeerId = id;
+                myPeerIdInput.value = id;
+                isPeerReady = true;
+                updateStatus('emerald', 'Bereit');
+                connectBtn.disabled = false;
+                addSystemMessage('Deine Peer-ID wurde generiert. Teile sie mit deinem Chat-Partner.');
+            });
+
+            peer.on('connection', (connection) => {
+                if (conn && conn.open) {
+                    connection.close();
+                    addSystemMessage('Eingehende Verbindung abgelehnt - bereits verbunden');
+                    return;
+                }
+                setupConnection(connection);
+            });
+
+            peer.on('error', (err) => {
+                console.error('Peer error:', err);
+                updateStatus('rose', 'Fehler');
+                isPeerReady = false;
+                connectBtn.disabled = true;
+                
+                const errorMessages = {
+                    'disconnected': 'Verbindung zum PeerJS Server getrennt. Reconnect läuft...',
+                    'unavailable-id': 'Peer-ID bereits vergeben. Seite neu laden.',
+                    'network': 'Netzwerkfehler. Prüfe Internetverbindung und HTTPS.',
+                    'webrtc': 'WebRTC Fehler. Browser blockiert möglicherweise die Verbindung.',
+                    'peer-unavailable': 'Peer nicht erreichbar. Prüfe die ID und ob der Peer online ist.',
+                    'server-error': 'PeerJS Server Fehler. Versuche es später erneut.',
+                    'socket-error': 'Socket-Verbindung fehlgeschlagen. Firewall oder HTTPS-Problem?',
+                    'socket-closed': 'Socket wurde geschlossen.',
+                    'ssl-unavailable': 'SSL/TLS nicht verfügbar. Nutze HTTPS.'
+                };
+                
+                const msg = errorMessages[err.type] || err.message || 'Unbekannter Fehler';
+                logError(err.type || 'unknown', msg);
+                
+                if (err.type === 'peer-unavailable') {
+                    addSystemMessage('Peer nicht erreichbar. Prüfe die ID.');
+                } else if (err.type === 'disconnected') {
+                    setTimeout(() => {
+                        if (peer) peer.reconnect();
+                    }, 3000);
+                }
+            });
+
+            peer.on('disconnected', () => {
+                updateStatus('amber', 'Getrennt');
+                isPeerReady = false;
+                connectBtn.disabled = true;
+                logError('disconnected', 'Verbindung zum Signaling-Server verloren');
+                addSystemMessage('Verbindung zum Signaling-Server verloren. Versuche erneut...');
+                peer.reconnect();
+            });
+
+            peer.on('close', () => {
+                isPeerReady = false;
+                connectBtn.disabled = true;
+                updateStatus('rose', 'Geschlossen');
+                logError('close', 'Peer-Verbindung wurde geschlossen');
+            });
+        }
+
+        // Verbindung aufbauen
+        function connectToPeer() {
+            if (!isPeerReady) {
+                addSystemMessage('Peer noch nicht bereit. Warte auf Initialisierung...');
+                return;
+            }
+
+            const remoteId = remotePeerIdInput.value.trim();
+            if (!remoteId) {
+                addSystemMessage('Bitte gib eine Peer-ID ein');
+                return;
+            }
+            
+            if (remoteId === localPeerId) {
+                addSystemMessage('Du kannst dich nicht mit dir selbst verbinden');
+                return;
+            }
+
+            updateStatus('amber', 'Verbinde...');
+            addSystemMessage(`Verbinde mit ${remoteId}...`);
+            
+            try {
+                const connection = peer.connect(remoteId, {
+                    reliable: true,
+                    serialization: 'binary'
+                });
+                
+                setupConnection(connection);
+            } catch (err) {
+                logError('connect', err.message);
+            }
+        }
+
+        // Verbindung konfigurieren
+        function setupConnection(connection) {
+            conn = connection;
+
+            conn.on('open', () => {
+                updateStatus('emerald', 'Verbunden');
+                connectionInfo.classList.remove('hidden');
+                connectedPeerId.textContent = conn.peer;
+                toggleConnectionUI(true);
+                addSystemMessage(`Verbunden mit ${conn.peer}`);
+                chatWindow.innerHTML = '';
+                addSystemMessage('Ende-zu-Ende verschlüsselte Verbindung hergestellt');
+            });
+
+            conn.on('data', (data) => {
+                handleIncomingData(data);
+            });
+
+            conn.on('close', () => {
+                updateStatus('amber', 'Getrennt');
+                connectionInfo.classList.add('hidden');
+                toggleConnectionUI(false);
+                addSystemMessage('Verbindung wurde getrennt');
+                conn = null;
+            });
+
+            conn.on('error', (err) => {
+                console.error('Connection error:', err);
+                logError('connection', err.message || 'Datenchannel-Fehler');
+            });
+        }
+
+        // Eingehende Daten behandeln
+        function handleIncomingData(data) {
+            if (data.type === 'message') {
+                addMessage(data.text, 'remote', data.timestamp);
+            } else if (data.type === 'file-start') {
+                handleFileStart(data);
+            } else if (data.type === 'file-chunk') {
+                handleFileChunk(data);
+            } else if (data.type === 'file-end') {
+                handleFileEnd(data);
+            }
+        }
+
+        // Textnachricht senden
+        function sendMessage() {
+            const text = messageInput.value.trim();
+            if (!text || !conn || !conn.open) return;
+
+            const data = {
+                type: 'message',
+                text: text,
+                timestamp: new Date().toISOString()
+            };
+
+            try {
+                conn.send(data);
+                addMessage(text, 'local', data.timestamp);
+                messageInput.value = '';
+            } catch (err) {
+                logError('send', 'Nachricht konnte nicht gesendet werden: ' + err.message);
+            }
+        }
+
+        // Datei senden
+        function sendFile(file) {
+            if (!conn || !conn.open) {
+                addSystemMessage('Keine aktive Verbindung');
+                return;
+            }
+
+            const fileId = Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+            const reader = new FileReader();
+            let offset = 0;
+
+            // Datei-Start signalisieren
+            conn.send({
+                type: 'file-start',
+                fileId: fileId,
+                fileName: file.name,
+                fileSize: file.size,
+                fileType: file.type
+            });
+
+            showFileProgress(`Sende ${file.name}...`, 0);
+            addSystemMessage(`Sende Datei: ${file.name} (${formatBytes(file.size)})`);
+
+            reader.onload = (e) => {
+                const chunk = e.target.result;
+                try {
+                    conn.send({
+                        type: 'file-chunk',
+                        fileId: fileId,
+                        chunk: chunk,
+                        offset: offset
+                    });
+
+                    offset += chunk.byteLength;
+                    const progress = Math.round((offset / file.size) * 100);
+                    showFileProgress(`Sende ${file.name}...`, progress);
+
+                    if (offset < file.size) {
+                        readNextChunk();
+                    } else {
+                        conn.send({
+                            type: 'file-end',
+                            fileId: fileId
+                        });
+                        hideFileProgress();
+                        addMessage(`Datei gesendet: ${file.name}`, 'local', new Date().toISOString());
+                    }
+                } catch (err) {
+                    logError('file-send', 'Chunk-Übertragung fehlgeschlagen: ' + err.message);
+                    hideFileProgress();
+                }
+            };
+
+            reader.onerror = (err) => {
+                logError('file-read', 'Datei konnte nicht gelesen werden');
+                hideFileProgress();
+            };
+
+            function readNextChunk() {
+                const slice = file.slice(offset, offset + CHUNK_SIZE);
+                reader.readAsArrayBuffer(slice);
+            }
+
+            readNextChunk();
+        }
+
+        // Datei-Empfang starten
+        function handleFileStart(data) {
+            incomingFile = {
+                id: data.fileId,
+                name: data.fileName,
+                size: data.fileSize,
+                type: data.fileType,
+                chunks: [],
+                receivedSize: 0
+            };
+            showFileProgress(`Empfange ${data.fileName}...`, 0);
+            addSystemMessage(`Empfange Datei: ${data.fileName} (${formatBytes(data.fileSize)})`);
+        }
+
+        // Datei-Chunk empfangen
+        function handleFileChunk(data) {
+            if (!incomingFile || incomingFile.id !== data.fileId) return;
+
+            incomingFile.chunks.push({
+                offset: data.offset,
+                data: data.chunk
+            });
+            incomingFile.receivedSize += data.chunk.byteLength;
+
+            const progress = Math.round((incomingFile.receivedSize / incomingFile.size) * 100);
+            showFileProgress(`Empfange ${incomingFile.name}...`, progress);
+        }
+
+        // Datei-Empfang abschließen
+        function handleFileEnd(data) {
+            if (!incomingFile || incomingFile.id !== data.fileId) return;
+
+            // Chunks nach Offset sortieren
+            incomingFile.chunks.sort((a, b) => a.offset - b.offset);
+            
+            // Blob erstellen
+            const buffers = incomingFile.chunks.map(c => c.data);
+            const blob = new Blob(buffers, { type: incomingFile.type });
+            const url = URL.createObjectURL(blob);
+
+            hideFileProgress();
+            addFileMessage(incomingFile.name, incomingFile.size, url, 'remote', new Date().toISOString());
+            
+            incomingFile = null;
+        }
+
+        // Nachricht zur Chat-UI hinzufügen
+        function addMessage(text, type, timestamp) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message-appear flex ${type === 'local' ? 'justify-end' : 'justify-start'}`;
+            
+            const time = new Date(timestamp).toLocaleTimeString('de-DE', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+
+            messageDiv.innerHTML = `
+                <div class="max-w-[75%] ${type === 'local' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-800'} rounded-2xl px-4 py-2.5 shadow-sm">
+                    <div class="text-sm break-words">${escapeHtml(text)}</div>
+                    <div class="text-xs mt-1 ${type === 'local' ? 'text-indigo-200' : 'text-slate-500'}">${time}</div>
+                </div>
+            `;
+            
+            chatWindow.appendChild(messageDiv);
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+        }
+
+        // Datei-Nachricht hinzufügen
+        function addFileMessage(fileName, fileSize, downloadUrl, type, timestamp) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message-appear flex ${type === 'local' ? 'justify-end' : 'justify-start'}`;
+            
+            const time = new Date(timestamp).toLocaleTimeString('de-DE', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+
+            messageDiv.innerHTML = `
+                <div class="max-w-[75%] ${type === 'local' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-800'} rounded-2xl px-4 py-2.5 shadow-sm">
+                    <div class="flex items-center gap-3">
+                        <div class="flex-shrink-0 w-10 h-10 ${type === 'local' ? 'bg-indigo-500' : 'bg-slate-200'} rounded-lg flex items-center justify-center">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                            </svg>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-sm font-medium truncate">${escapeHtml(fileName)}</div>
+                            <div class="text-xs ${type === 'local' ? 'text-indigo-200' : 'text-slate-500'}">${formatBytes(fileSize)}</div>
+                        </div>
+                        <a href="${downloadUrl}" download="${escapeHtml(fileName)}" 
+                           class="flex-shrink-0 px-3 py-1.5 ${type === 'local' ? 'bg-white text-indigo-600' : 'bg-indigo-600 text-white'} rounded-lg text-xs font-medium hover:opacity-90 transition-opacity">
+                            Download
+                        </a>
+                    </div>
+                    <div class="text-xs mt-1 ${type === 'local' ? 'text-indigo-200' : 'text-slate-500'}">${time}</div>
+                </div>
+            `;
+            
+            chatWindow.appendChild(messageDiv);
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+        }
+
+        // System-Nachricht hinzufügen
+        function addSystemMessage(text) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'flex justify-center';
+            messageDiv.innerHTML = `
+                <div class="text-xs text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full">
+                    ${escapeHtml(text)}
+                </div>
+            `;
+            chatWindow.appendChild(messageDiv);
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+        }
+
+        // UI State togglen
+        function toggleConnectionUI(connected) {
+            messageInput.disabled = !connected;
+            sendBtn.disabled = !connected;
+            fileBtn.disabled = !connected;
+            connectBtn.classList.toggle('hidden', connected);
+            disconnectBtn.classList.toggle('hidden', !connected);
+            remotePeerIdInput.disabled = connected;
+        }
+
+        // Status Update
+        function updateStatus(color, text) {
+            const colors = {
+                amber: 'bg-amber-50 text-amber-700 border-amber-200',
+                emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                rose: 'bg-rose-50 text-rose-700 border-rose-200'
+            };
+            const dotColors = {
+                amber: 'bg-amber-500',
+                emerald: 'bg-emerald-500',
+                rose: 'bg-rose-500'
+            };
+            
+            statusBadge.className = `flex items-center gap-2 px-4 py-2 ${colors[color]} rounded-full border`;
+            statusBadge.querySelector('.pulse-dot').className = `pulse-dot w-2 h-2 ${dotColors[color]} rounded-full`;
+            statusText.textContent = text;
+        }
+
+        // File Progress UI
+        function showFileProgress(text, percent) {
+            fileProgress.classList.remove('hidden');
+            fileProgressText.textContent = text;
+            fileProgressPercent.textContent = percent + '%';
+            fileProgressBar.style.width = percent + '%';
+        }
+
+        function hideFileProgress() {
+            setTimeout(() => {
+                fileProgress.classList.add('hidden');
+                fileProgressBar.style.width = '0%';
+            }, 1000);
+        }
+
+        // Peer-ID kopieren
+        function copyPeerId() {
+            const id = myPeerIdInput.value;
+            
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(id).then(() => {
+                    const originalHTML = copyIdBtn.innerHTML;
+                    copyIdBtn.innerHTML = `
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        <span>Kopiert!</span>
+                    `;
+                    setTimeout(() => {
+                        copyIdBtn.innerHTML = originalHTML;
+                    }, 2000);
+                }).catch(() => {
+                    showCopyFallback(id);
+                });
+            } else {
+                showCopyFallback(id);
+            }
+        }
+
+        function showCopyFallback(id) {
+            copyFallback.classList.remove('hidden');
+            copyFallbackInput.value = id;
+            copyFallbackInput.select();
+            addSystemMessage('Clipboard nicht verfügbar. ID oben markiert - Strg+C zum Kopieren');
+        }
+
+        // Verbindung trennen
+        function disconnect() {
+            if (conn) {
+                conn.close();
+            }
+        }
+
+        // Hilfsfunktionen
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+        }
+
+        // Event Listener
+        connectBtn.addEventListener('click', connectToPeer);
+        disconnectBtn.addEventListener('click', disconnect);
+        sendBtn.addEventListener('click', sendMessage);
+        copyIdBtn.addEventListener('click', copyPeerId);
+        
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        fileBtn.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                // Warnung bei großen Dateien
+                if (file.size > 100 * 1024) {
+                    if (!confirm(`Die Datei ist ${formatBytes(file.size)} groß. Das Übertragen kann lange dauern. Fortfahren?`)) {
+                        fileInput.value = '';
+                        return;
+                    }
+                }
+                sendFile(file);
+                fileInput.value = '';
+            }
+        });
+
+        remotePeerIdInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !connectBtn.disabled) {
+                connectToPeer();
+            }
+        });
+
+        // App starten
+        initPeer();
+    </script>
+<script>(function(){document.addEventListener("click",function(e){var a=e.target.closest("[data-product-id]");if(!a)return;e.preventDefault();var pid=a.getAttribute("data-product-id");if(pid)parent.postMessage({type:"ecto-artifact-link-click",productId:pid},"*")})})();</script>
+</body>
+</html>
